@@ -82,6 +82,23 @@ async function run() {
       }
     });
 
+    // get user role
+    app.get("/users/role/:email", async (req, res) => {
+      try {
+        const email = decodeURIComponent(req.params.email.toLowerCase());
+        const user = await usersCollection.findOne({ email });
+
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        res.json({ role: user.role });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Error fetching role" });
+      }
+    });
+
     // Update user profile by email
     app.patch("/users/:email", async (req, res) => {
       try {
@@ -111,6 +128,28 @@ async function run() {
 
       const result = await requestsCollection.insertOne(requestData);
       res.send(result);
+    });
+
+    // Get requests by donor
+    app.get("/requests", async (req, res) => {
+      try {
+        const email = req.query.email;
+        if (!email) {
+          return res
+            .status(400)
+            .json({ message: "Email query parameter is required" });
+        }
+
+        const donorRequests = await requestsCollection
+          .find({ requesterEmail: email })
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.json(donorRequests);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Error fetching requests" });
+      }
     });
 
     // Send a ping to confirm the connection
