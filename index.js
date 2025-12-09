@@ -25,6 +25,22 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
+    const db = client.db("blood_connect_db");
+    const usersCollection = db.collection("users");
+
+    // GET user role
+    app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+
+      const user = await usersCollection.findOne({ email });
+
+      if (!user) {
+        return res.status(404).send({ message: "User not found" });
+      }
+
+      res.send({ role: user.role });
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
