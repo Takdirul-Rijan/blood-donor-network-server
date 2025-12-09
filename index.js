@@ -65,15 +65,36 @@ async function run() {
 
     // GET user role
     app.get("/users/:email/role", async (req, res) => {
-      const email = req.params.email;
+      try {
+        const email = decodeURIComponent(req.params.email.toLowerCase());
+        const user = await usersCollection.findOne({ email });
 
-      const user = await usersCollection.findOne({ email });
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
 
-      if (!user) {
-        return res.status(404).send({ message: "User not found" });
+        res.send({ role: user.role });
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: "Server error" });
       }
+    });
 
-      res.send({ role: user.role });
+    // Update user
+
+    app.patch("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const { name, avatar, bloodGroup, district, upazila } = req.body;
+
+      const result = await usersCollection.updateOne(
+        { email },
+        { $set: { name, avatar, bloodGroup, district, upazila } }
+      );
+
+      if (result.matchedCount === 0)
+        return res.status(404).json({ message: "User not found" });
+
+      res.json({ message: "User updated successfully" });
     });
 
     // Send a ping to confirm a successful connection
