@@ -1,17 +1,18 @@
 const express = require("express");
 const cors = require("cors");
+const { MongoClient, ServerApiVersion } = require("mongodb");
 const app = express();
 require("dotenv").config();
-const { MongoClient, ServerApiVersion } = require("mongodb");
 const port = process.env.PORT || 3000;
 
-// middleware
+// Middleware
 app.use(express.json());
 app.use(cors());
 
+// MongoDB URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.qcldgif.mongodb.net/?appName=Cluster0`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
+// MongoClient instance
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -22,18 +23,18 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server
+    // Connect to MongoDB
     await client.connect();
-
     const db = client.db("blood_connect_db");
     const usersCollection = db.collection("users");
 
-    //  User Registration
+    // Register a new user
     app.post("/users/register", async (req, res) => {
-      try {
-        const { name, email, avatar, bloodGroup, district, upazila, password } =
-          req.body;
+      console.log("Register request body:", req.body);
+      const { name, email, avatar, bloodGroup, district, upazila, password } =
+        req.body;
 
+      try {
         const existingUser = await usersCollection.findOne({ email });
         if (existingUser) {
           return res.status(400).json({ message: "User already exists" });
@@ -63,56 +64,55 @@ async function run() {
       }
     });
 
-    // GET user role
-    app.get("/users/:email/role", async (req, res) => {
+    // Get user profile by email
+    app.get("/users/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
         const user = await usersCollection.findOne({ email });
 
         if (!user) {
-          return res.status(404).send({ message: "User not found" });
+          return res.status(404).json({ message: "User not found" });
         }
 
-        res.send({ role: user.role });
-      } catch (err) {
-        console.error(err);
-        res.status(500).send({ message: "Server error" });
+        res.json(user);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Error fetching user data" });
       }
     });
 
-    // Update user
-
+    // Update user profile by email
     app.patch("/users/:email", async (req, res) => {
-      const email = req.params.email;
-      const { name, avatar, bloodGroup, district, upazila } = req.body;
+      try {
+        const email = decodeURIComponent(req.params.email.toLowerCase());
+        const { name, avatar, bloodGroup, district, upazila } = req.body;
 
-      const result = await usersCollection.updateOne(
-        { email },
-        { $set: { name, avatar, bloodGroup, district, upazila } }
-      );
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: { name, avatar, bloodGroup, district, upazila } }
+        );
 
-      if (result.matchedCount === 0)
-        return res.status(404).json({ message: "User not found" });
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: "User not found" });
+        }
 
-      res.json({ message: "User updated successfully" });
+        res.json({ message: "User updated successfully" });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Error updating user data" });
+      }
     });
 
-    // Send a ping to confirm a successful connection
+    // Send a ping to confirm the connection
     await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
-  } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
+    console.log("Connected to MongoDB!");
+  } catch (error) {
+    console.error(error);
   }
 }
+
 run().catch(console.dir);
 
-app.get("/", (req, res) => {
-  res.send("Hello from BloodConnect backend!");
-});
-
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+  console.log(`Server running on port ${port}`);
 });
