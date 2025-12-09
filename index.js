@@ -27,6 +27,7 @@ async function run() {
     await client.connect();
     const db = client.db("blood_connect_db");
     const usersCollection = db.collection("users");
+    const requestsCollection = db.collection("requests");
 
     // Register a new user
     app.post("/users/register", async (req, res) => {
@@ -103,15 +104,30 @@ async function run() {
       }
     });
 
+    // create a blood request
+    app.post("/requests", async (req, res) => {
+      const requestData = req.body;
+      // console.log("headers", req.headers);
+
+      const result = await requestsCollection.insertOne(requestData);
+      res.send(result);
+    });
+
     // Send a ping to confirm the connection
     await client.db("admin").command({ ping: 1 });
-    console.log("Connected to MongoDB!");
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
   } catch (error) {
     console.error(error);
   }
 }
 
 run().catch(console.dir);
+
+app.get("/", (req, res) => {
+  res.send("Welcome to the Blood Connect API!");
+});
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
