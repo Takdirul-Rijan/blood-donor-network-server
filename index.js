@@ -8,8 +8,10 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cors());
 
+// MongoDB connection URL using credentials from environment variables
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.qcldgif.mongodb.net/?appName=Cluster0`;
 
+// Create MongoDB client with server API configuration
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -18,15 +20,19 @@ const client = new MongoClient(uri, {
   },
 });
 
+// Main function to run database operations
 async function run() {
   try {
     await client.connect();
+
     const db = client.db("blood_connect_db");
     const usersCollection = db.collection("users");
     const requestsCollection = db.collection("requests");
 
+    // User registration route
     app.post("/users/register", async (req, res) => {
       console.log("Register request body:", req.body);
+
       const { name, email, avatar, bloodGroup, district, upazila, password } =
         req.body;
 
@@ -50,16 +56,18 @@ async function run() {
         };
 
         const result = await usersCollection.insertOne(newUser);
+
         res.status(201).json({
           message: "User registered successfully",
           userId: result.insertedId,
         });
       } catch (error) {
-        console.error(error);
+        console.error(error); // Log error
         res.status(500).json({ message: "Server error" });
       }
     });
 
+    // Get user data by email
     app.get("/users/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
@@ -76,6 +84,7 @@ async function run() {
       }
     });
 
+    // Get user role by email
     app.get("/users/role/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
@@ -92,13 +101,14 @@ async function run() {
       }
     });
 
+    // Update user data
     app.patch("/users/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
         const { name, avatar, bloodGroup, district, upazila } = req.body;
 
         const result = await usersCollection.updateOne(
-          { email },
+          { email }, // Filter by email
           { $set: { name, avatar, bloodGroup, district, upazila } }
         );
 
@@ -108,11 +118,13 @@ async function run() {
 
         res.json({ message: "User updated successfully" });
       } catch (error) {
-        console.error(error);
+        console.error(error); // Log error
         res.status(500).json({ message: "Error updating user data" });
+        r;
       }
     });
 
+    // Create a blood request
     app.post("/requests", async (req, res) => {
       const requestData = req.body;
 
@@ -157,9 +169,11 @@ async function run() {
       }
     });
 
+    // Get 3 most recent requests for a donor
     app.get("/requests/recent", async (req, res) => {
       try {
         const email = req.query.email;
+
         if (!email) {
           return res
             .status(400)
@@ -172,6 +186,7 @@ async function run() {
           .limit(3)
           .toArray();
 
+        // Format response data
         const formatted = donorRequests.map((req) => ({
           _id: req._id,
           recipientName: req.patientName || "Not Provided",
@@ -193,16 +208,69 @@ async function run() {
       }
     });
 
-    // GET SINGLE REQUEST
+    // Get all requests with pagination and optional status filter
+    app.get("/requests/all", async (req, res) => {
+      try {
+        const email = req.query.email;
+
+        if (!email) {
+          return res
+            .status(400)
+            .json({ message: "Email query parameter is required" });
+        }
+
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const status = req.query.status;
+
+        const filter = { requesterEmail: email };
+
+        if (status) {
+          filter.status = status;
+        }
+
+        const total = await requestsCollection.countDocuments(filter);
+
+        const donorRequests = await requestsCollection
+          .find(filter)
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .toArray();
+
+        const formatted = donorRequests.map((req) => ({
+          _id: req._id,
+          recipientName: req.patientName || "Not Provided",
+          recipientLocation:
+            `${req.district || ""}, ${req.upazila || ""}`.replace(/, $/, "") ||
+            "Not Provided",
+          donationDate: req.neededDate || "Not Provided",
+          donationTime: req.neededTime || "Not Provided",
+          bloodGroup: req.bloodGroup || "Not Provided",
+          donationStatus: req.status || "pending",
+          donorName: req.requesterName,
+          donorEmail: req.requesterEmail,
+          createdAt: req.createdAt,
+        }));
+
+        res.json({ data: formatted, total });
+      } catch (error) {
+        console.error("Error in /requests/all:", error); // Log error
+        res.status(500).json({ message: "Error fetching requests" }); // Error response
+      }
+    });
+
+    // Get a single request by ID
     app.get("/requests/:id", async (req, res) => {
       const id = req.params.id;
       const request = await requestsCollection.findOne({
         _id: new ObjectId(id),
       });
+
       res.json(request);
     });
 
-    // UPDATE REQUEST
+    // Update a request by ID (full update)
     app.put("/requests/:id", async (req, res) => {
       const id = req.params.id;
       const body = req.body;
@@ -215,6 +283,7 @@ async function run() {
       res.json(updated);
     });
 
+    // Update only request status
     app.patch("/requests/status/:id", async (req, res) => {
       const id = req.params.id;
       const { status } = req.body;
@@ -227,6 +296,7 @@ async function run() {
       res.json({ message: "Status updated" });
     });
 
+    // Delete a request by ID
     app.delete("/requests/:id", async (req, res) => {
       const id = req.params.id;
 
@@ -237,7 +307,7 @@ async function run() {
       res.json(result);
     });
 
-    await client.db("admin").command({ ping: 1 });
+    await client.db("admin").command({ ping: 1 }); // Ping MongoDB to test connection
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
@@ -248,10 +318,12 @@ async function run() {
 
 run().catch(console.dir);
 
+// Root route
 app.get("/", (req, res) => {
   res.send("Welcome to the Blood Connect API!");
 });
 
+// Start server
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
