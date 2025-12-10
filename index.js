@@ -121,17 +121,53 @@ async function run() {
       }
     });
 
-    // create a blood request
+    // Create a blood request
     app.post("/requests", async (req, res) => {
       const requestData = req.body;
-      // console.log("headers", req.headers);
 
-      const result = await requestsCollection.insertOne(requestData);
-      res.send(result);
+      const {
+        patientName,
+        bloodGroup,
+        neededDate,
+        district,
+        upazila,
+        reason,
+        phone,
+      } = requestData;
+
+      if (
+        !patientName ||
+        !bloodGroup ||
+        !neededDate ||
+        !district ||
+        !upazila ||
+        !reason ||
+        !phone
+      ) {
+        return res.status(400).json({ error: "All fields are required" });
+      }
+
+      try {
+        const result = await requestsCollection.insertOne({
+          ...requestData,
+          createdAt: new Date(),
+        });
+
+        res.status(201).json({
+          success: true,
+          message: "Blood request submitted successfully",
+          requestId: result.insertedId,
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({
+          error: "Something went wrong. Please try again later.",
+        });
+      }
     });
 
-    // Get requests by donor
-    app.get("/requests", async (req, res) => {
+    // get only 3 recent requests for donor dashboard
+    app.get("/requests/recent", async (req, res) => {
       try {
         const email = req.query.email;
         if (!email) {
@@ -143,12 +179,29 @@ async function run() {
         const donorRequests = await requestsCollection
           .find({ requesterEmail: email })
           .sort({ createdAt: -1 })
+          .limit(3)
           .toArray();
 
-        res.json(donorRequests);
+        const formatted = donorRequests.map((req) => ({
+          _id: req._id,
+          recipientName: req.patientName || "Not Provided",
+
+          recipientLocation:
+            `${req.district || ""}, ${req.upazila || ""}`.replace(/, $/, "") ||
+            "Not Provided",
+
+          donationDate: req.neededDate || "Not Provided",
+          donationTime: req.neededTime || "Not Provided",
+          bloodGroup: req.bloodGroup || "Not Provided",
+          donationStatus: req.status || "pending",
+          donorName: req.requesterName,
+          donorEmail: req.requesterEmail,
+          createdAt: req.createdAt,
+        }));
+
+        res.json(formatted);
       } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Error fetching requests" });
+        res.status(500).json({ message: "Error fetching recent requests" });
       }
     });
 
