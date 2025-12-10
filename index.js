@@ -326,6 +326,45 @@ async function run() {
       res.json(result);
     });
 
+    // all users management
+
+    app.get("/admin/users", async (req, res) => {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 5;
+      const status = req.query.status;
+
+      const filter = {};
+      if (status) filter.status = status;
+
+      const total = await usersCollection.countDocuments(filter);
+
+      const users = await usersCollection
+        .find(filter)
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .toArray();
+
+      res.json({ users, total });
+    });
+
+    app.patch("/admin/users/status/:email", async (req, res) => {
+      const email = req.params.email;
+      const { status } = req.body;
+
+      await usersCollection.updateOne({ email }, { $set: { status } });
+
+      res.json({ success: true });
+    });
+
+    app.patch("/admin/users/role/:email", async (req, res) => {
+      const email = req.params.email;
+      const { role } = req.body;
+
+      await usersCollection.updateOne({ email }, { $set: { role } });
+
+      res.json({ success: true });
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
