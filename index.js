@@ -1,18 +1,15 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 require("dotenv").config();
 const port = process.env.PORT || 3000;
 
-// Middleware
 app.use(express.json());
 app.use(cors());
 
-// MongoDB URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.qcldgif.mongodb.net/?appName=Cluster0`;
 
-// MongoClient instance
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -23,13 +20,11 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect to MongoDB
     await client.connect();
     const db = client.db("blood_connect_db");
     const usersCollection = db.collection("users");
     const requestsCollection = db.collection("requests");
 
-    // Register a new user
     app.post("/users/register", async (req, res) => {
       console.log("Register request body:", req.body);
       const { name, email, avatar, bloodGroup, district, upazila, password } =
@@ -65,7 +60,6 @@ async function run() {
       }
     });
 
-    // Get user profile by email
     app.get("/users/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
@@ -82,7 +76,6 @@ async function run() {
       }
     });
 
-    // get user role
     app.get("/users/role/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
@@ -99,7 +92,6 @@ async function run() {
       }
     });
 
-    // Update user profile by email
     app.patch("/users/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
@@ -121,7 +113,6 @@ async function run() {
       }
     });
 
-    // Create a blood request
     app.post("/requests", async (req, res) => {
       const requestData = req.body;
 
@@ -166,7 +157,6 @@ async function run() {
       }
     });
 
-    // get only 3 recent requests for donor dashboard
     app.get("/requests/recent", async (req, res) => {
       try {
         const email = req.query.email;
@@ -185,11 +175,9 @@ async function run() {
         const formatted = donorRequests.map((req) => ({
           _id: req._id,
           recipientName: req.patientName || "Not Provided",
-
           recipientLocation:
             `${req.district || ""}, ${req.upazila || ""}`.replace(/, $/, "") ||
             "Not Provided",
-
           donationDate: req.neededDate || "Not Provided",
           donationTime: req.neededTime || "Not Provided",
           bloodGroup: req.bloodGroup || "Not Provided",
@@ -205,7 +193,50 @@ async function run() {
       }
     });
 
-    // Send a ping to confirm the connection
+    // GET SINGLE REQUEST
+    app.get("/requests/:id", async (req, res) => {
+      const id = req.params.id;
+      const request = await requestsCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      res.json(request);
+    });
+
+    // UPDATE REQUEST
+    app.put("/requests/:id", async (req, res) => {
+      const id = req.params.id;
+      const body = req.body;
+
+      const updated = await requestsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: body }
+      );
+
+      res.json(updated);
+    });
+
+    app.patch("/requests/status/:id", async (req, res) => {
+      const id = req.params.id;
+      const { status } = req.body;
+
+      await requestsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status } }
+      );
+
+      res.json({ message: "Status updated" });
+    });
+
+    app.delete("/requests/:id", async (req, res) => {
+      const id = req.params.id;
+
+      const result = await requestsCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+
+      res.json(result);
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
