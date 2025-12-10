@@ -62,7 +62,7 @@ async function run() {
           userId: result.insertedId,
         });
       } catch (error) {
-        console.error(error); // Log error
+        console.error(error);
         res.status(500).json({ message: "Server error" });
       }
     });
@@ -108,7 +108,7 @@ async function run() {
         const { name, avatar, bloodGroup, district, upazila } = req.body;
 
         const result = await usersCollection.updateOne(
-          { email }, // Filter by email
+          { email },
           { $set: { name, avatar, bloodGroup, district, upazila } }
         );
 
@@ -118,9 +118,8 @@ async function run() {
 
         res.json({ message: "User updated successfully" });
       } catch (error) {
-        console.error(error); // Log error
+        console.error(error);
         res.status(500).json({ message: "Error updating user data" });
-        r;
       }
     });
 
@@ -186,7 +185,6 @@ async function run() {
           .limit(3)
           .toArray();
 
-        // Format response data
         const formatted = donorRequests.map((req) => ({
           _id: req._id,
           recipientName: req.patientName || "Not Provided",
@@ -255,8 +253,8 @@ async function run() {
 
         res.json({ data: formatted, total });
       } catch (error) {
-        console.error("Error in /requests/all:", error); // Log error
-        res.status(500).json({ message: "Error fetching requests" }); // Error response
+        console.error("Error in /requests/all:", error);
+        res.status(500).json({ message: "Error fetching requests" });
       }
     });
 
@@ -307,7 +305,7 @@ async function run() {
       res.json(result);
     });
 
-    await client.db("admin").command({ ping: 1 }); // Ping MongoDB to test connection
+    await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
