@@ -279,6 +279,48 @@ async function run() {
       }
     });
 
+    // Admin All Donation Requests
+    app.get("/admin/requests/all", async (req, res) => {
+      try {
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const status = req.query.status;
+
+        const filter = {};
+
+        if (status) {
+          filter.status = status;
+        }
+
+        const total = await requestsCollection.countDocuments(filter);
+
+        const allRequests = await requestsCollection
+          .find(filter)
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .toArray();
+
+        const formatted = allRequests.map((req) => ({
+          _id: req._id,
+          recipientName: req.patientName || "Not Provided",
+          recipientLocation:
+            `${req.district || ""}, ${req.upazila || ""}`.replace(/, $/, "") ||
+            "Not Provided",
+          donationDate: req.neededDate || "Not Provided",
+          donationTime: req.neededTime || "Not Provided",
+          bloodGroup: req.bloodGroup || "Not Provided",
+          donationStatus: req.status || "pending",
+          requesterEmail: req.requesterEmail,
+          createdAt: req.createdAt,
+        }));
+
+        res.json({ data: formatted, total });
+      } catch (error) {
+        res.status(500).json({ message: "Error fetching admin requests" });
+      }
+    });
+
     // Get a single request by ID
     app.get("/requests/:id", async (req, res) => {
       const id = req.params.id;
