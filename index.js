@@ -28,6 +28,7 @@ async function run() {
     const db = client.db("blood_connect_db");
     const usersCollection = db.collection("users");
     const requestsCollection = db.collection("requests");
+    const fundsCollection = db.collection("funds");
 
     // User registration route
     app.post("/users/register", async (req, res) => {
@@ -120,6 +121,26 @@ async function run() {
       } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Error updating user data" });
+      }
+    });
+
+    // Admin Dashboard statistics
+    app.get("/admin/dashboard-stats", async (req, res) => {
+      try {
+        const totalUsers = await usersCollection.countDocuments({});
+        const totalRequests = await requestsCollection.countDocuments({});
+        const totalFunds = await fundsCollection
+          .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
+          .toArray();
+
+        res.json({
+          totalUsers,
+          totalRequests,
+          totalFunds: totalFunds[0]?.total || 0,
+        });
+      } catch (error) {
+        console.error("Error fetching admin stats:", error);
+        res.status(500).json({ message: "Error fetching admin statistics" });
       }
     });
 
