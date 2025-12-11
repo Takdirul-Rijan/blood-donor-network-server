@@ -8,10 +8,8 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cors());
 
-// MongoDB connection URL using credentials from environment variables
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.qcldgif.mongodb.net/?appName=Cluster0`;
 
-// Create MongoDB client with server API configuration
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -20,7 +18,6 @@ const client = new MongoClient(uri, {
   },
 });
 
-// Main function to run database operations
 async function run() {
   try {
     await client.connect();
@@ -30,7 +27,6 @@ async function run() {
     const requestsCollection = db.collection("requests");
     const fundsCollection = db.collection("funds");
 
-    // User registration route
     app.post("/users/register", async (req, res) => {
       console.log("Register request body:", req.body);
 
@@ -68,7 +64,6 @@ async function run() {
       }
     });
 
-    // Get user data by email
     app.get("/users/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
@@ -85,7 +80,6 @@ async function run() {
       }
     });
 
-    // Get user role by email
     app.get("/users/role/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
@@ -102,7 +96,6 @@ async function run() {
       }
     });
 
-    // Update user data
     app.patch("/users/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
@@ -124,7 +117,6 @@ async function run() {
       }
     });
 
-    // Admin Dashboard statistics
     app.get("/admin/dashboard-stats", async (req, res) => {
       try {
         const totalUsers = await usersCollection.countDocuments({});
@@ -144,9 +136,18 @@ async function run() {
       }
     });
 
-    // Create a blood request
     app.post("/requests", async (req, res) => {
       const requestData = req.body;
+
+      const requesterEmail = requestData.requesterEmail;
+      const user = await usersCollection.findOne({ email: requesterEmail });
+
+      if (!user || user.status === "blocked") {
+        return res.status(403).json({
+          success: false,
+          message: "Blocked users cannot create donation requests",
+        });
+      }
 
       const {
         patientName,
@@ -189,7 +190,6 @@ async function run() {
       }
     });
 
-    // Get 3 most recent requests for a donor
     app.get("/requests/recent", async (req, res) => {
       try {
         const email = req.query.email;
@@ -206,20 +206,37 @@ async function run() {
           .limit(3)
           .toArray();
 
-        const formatted = donorRequests.map((req) => ({
-          _id: req._id,
-          recipientName: req.patientName || "Not Provided",
-          recipientLocation:
-            `${req.district || ""}, ${req.upazila || ""}`.replace(/, $/, "") ||
-            "Not Provided",
-          donationDate: req.neededDate || "Not Provided",
-          donationTime: req.neededTime || "Not Provided",
-          bloodGroup: req.bloodGroup || "Not Provided",
-          donationStatus: req.status || "pending",
-          donorName: req.requesterName,
-          donorEmail: req.requesterEmail,
-          createdAt: req.createdAt,
-        }));
+        const formatted = await Promise.all(
+          donorRequests.map(async (req) => {
+            let donorName = null;
+            let donorEmail = null;
+
+            if (req.status === "inprogress" && req.donorEmail) {
+              const donor = await usersCollection.findOne({
+                email: req.donorEmail,
+              });
+              donorName = donor?.name || req.donorName || null;
+              donorEmail = donor?.email || req.donorEmail || null;
+            }
+
+            return {
+              _id: req._id,
+              recipientName: req.patientName || "Not Provided",
+              recipientLocation:
+                `${req.district || ""}, ${req.upazila || ""}`.replace(
+                  /, $/,
+                  ""
+                ) || "Not Provided",
+              donationDate: req.neededDate || "Not Provided",
+              donationTime: req.neededTime || "Not Provided",
+              bloodGroup: req.bloodGroup || "Not Provided",
+              donationStatus: req.status || "pending",
+              donorName: donorName || req.requesterName,
+              donorEmail: donorEmail || req.requesterEmail,
+              createdAt: req.createdAt,
+            };
+          })
+        );
 
         res.json(formatted);
       } catch (error) {
@@ -227,7 +244,6 @@ async function run() {
       }
     });
 
-    // Get all requests with pagination and optional status filter
     app.get("/requests/all", async (req, res) => {
       try {
         const email = req.query.email;
@@ -257,20 +273,37 @@ async function run() {
           .limit(limit)
           .toArray();
 
-        const formatted = donorRequests.map((req) => ({
-          _id: req._id,
-          recipientName: req.patientName || "Not Provided",
-          recipientLocation:
-            `${req.district || ""}, ${req.upazila || ""}`.replace(/, $/, "") ||
-            "Not Provided",
-          donationDate: req.neededDate || "Not Provided",
-          donationTime: req.neededTime || "Not Provided",
-          bloodGroup: req.bloodGroup || "Not Provided",
-          donationStatus: req.status || "pending",
-          donorName: req.requesterName,
-          donorEmail: req.requesterEmail,
-          createdAt: req.createdAt,
-        }));
+        const formatted = await Promise.all(
+          donorRequests.map(async (req) => {
+            let donorName = null;
+            let donorEmail = null;
+
+            if (req.status === "inprogress" && req.donorEmail) {
+              const donor = await usersCollection.findOne({
+                email: req.donorEmail,
+              });
+              donorName = donor?.name || req.donorName || null;
+              donorEmail = donor?.email || req.donorEmail || null;
+            }
+
+            return {
+              _id: req._id,
+              recipientName: req.patientName || "Not Provided",
+              recipientLocation:
+                `${req.district || ""}, ${req.upazila || ""}`.replace(
+                  /, $/,
+                  ""
+                ) || "Not Provided",
+              donationDate: req.neededDate || "Not Provided",
+              donationTime: req.neededTime || "Not Provided",
+              bloodGroup: req.bloodGroup || "Not Provided",
+              donationStatus: req.status || "pending",
+              donorName: donorName || req.requesterName,
+              donorEmail: donorEmail || req.requesterEmail,
+              createdAt: req.createdAt,
+            };
+          })
+        );
 
         res.json({ data: formatted, total });
       } catch (error) {
@@ -279,7 +312,6 @@ async function run() {
       }
     });
 
-    // Admin All Donation Requests
     app.get("/admin/requests/all", async (req, res) => {
       try {
         const page = parseInt(req.query.page, 10) || 1;
@@ -321,7 +353,6 @@ async function run() {
       }
     });
 
-    // Get a single request by ID
     app.get("/requests/:id", async (req, res) => {
       const id = req.params.id;
       const request = await requestsCollection.findOne({
@@ -331,7 +362,6 @@ async function run() {
       res.json(request);
     });
 
-    // Update a request by ID (full update)
     app.put("/requests/:id", async (req, res) => {
       const id = req.params.id;
       const body = req.body;
@@ -344,20 +374,25 @@ async function run() {
       res.json(updated);
     });
 
-    // Update only request status
+    //  fixed status update
     app.patch("/requests/status/:id", async (req, res) => {
       const id = req.params.id;
-      const { status } = req.body;
+      const { status, donorEmail } = req.body;
+
+      const updateData = { status };
+
+      if (status === "inprogress" && donorEmail) {
+        updateData.donorEmail = donorEmail;
+      }
 
       await requestsCollection.updateOne(
         { _id: new ObjectId(id) },
-        { $set: { status } }
+        { $set: updateData }
       );
 
       res.json({ message: "Status updated" });
     });
 
-    // Delete a request by ID
     app.delete("/requests/:id", async (req, res) => {
       const id = req.params.id;
 
@@ -367,8 +402,6 @@ async function run() {
 
       res.json(result);
     });
-
-    // all users management
 
     app.get("/admin/users", async (req, res) => {
       const page = parseInt(req.query.page) || 1;
@@ -407,6 +440,29 @@ async function run() {
       res.json({ success: true });
     });
 
+    // Volunteer dashboard stats
+    app.get("/volunteer/dashboard-stats", async (req, res) => {
+      try {
+        const totalUsers = await usersCollection.countDocuments({});
+        const totalRequests = await requestsCollection.countDocuments({});
+        const totalFundingAgg = await fundsCollection
+          .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
+          .toArray();
+        const totalFunding = totalFundingAgg[0]?.total || 0;
+
+        res.json({
+          totalUsers,
+          totalRequests,
+          totalFunding,
+        });
+      } catch (error) {
+        console.error("Error fetching volunteer stats:", error);
+        res
+          .status(500)
+          .json({ message: "Error fetching volunteer statistics" });
+      }
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
@@ -418,12 +474,10 @@ async function run() {
 
 run().catch(console.dir);
 
-// Root route
 app.get("/", (req, res) => {
   res.send("Welcome to the Blood Connect API!");
 });
 
-// Start server
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
