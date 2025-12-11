@@ -463,6 +463,24 @@ async function run() {
       }
     });
 
+    // search donors
+    app.get("/donors/search", async (req, res) => {
+      const { bloodGroup, district, upazila } = req.query;
+
+      const donors = await usersCollection
+        .find({
+          role: "donor",
+          status: "active",
+          bloodGroup,
+          district,
+          upazila,
+        })
+        .project({ password: 0 })
+        .toArray();
+
+      res.send(donors);
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
