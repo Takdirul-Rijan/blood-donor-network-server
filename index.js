@@ -3,6 +3,8 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 require("dotenv").config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET);
+
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
@@ -25,7 +27,7 @@ async function run() {
     const db = client.db("blood_connect_db");
     const usersCollection = db.collection("users");
     const requestsCollection = db.collection("requests");
-    const fundsCollection = db.collection("funds");
+    const fundsCollection = db.collection("fundings");
 
     app.post("/users/register", async (req, res) => {
       console.log("Register request body:", req.body);
@@ -121,14 +123,14 @@ async function run() {
       try {
         const totalUsers = await usersCollection.countDocuments({});
         const totalRequests = await requestsCollection.countDocuments({});
-        const totalFunds = await fundsCollection
+        const totalFundsAgg = await fundsCollection
           .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
           .toArray();
 
         res.json({
           totalUsers,
           totalRequests,
-          totalFunds: totalFunds[0]?.total || 0,
+          totalFunding: totalFundsAgg[0]?.total || 0,
         });
       } catch (error) {
         console.error("Error fetching admin stats:", error);
@@ -374,7 +376,6 @@ async function run() {
       res.json(updated);
     });
 
-    //  fixed status update
     app.patch("/requests/status/:id", async (req, res) => {
       const id = req.params.id;
       const { status, donorEmail } = req.body;
@@ -479,6 +480,97 @@ async function run() {
         .toArray();
 
       res.send(donors);
+    });
+
+    // stripe integration
+
+    // Create Checkout Session (User clicks Give Fund)
+    app.post("/create-checkout-session", async (req, res) => {
+      try {
+        const { amount, email, name } = req.body;
+
+        if (!amount || !email || !name) {
+          return res.status(400).send({ message: "Missing required fields" });
+        }
+
+        const session = await stripe.checkout.sessions.create({
+          payment_method_types: ["card"],
+          line_items: [
+            {
+              price_data: {
+                currency: "USD",
+                unit_amount: parseInt(amount) * 100,
+                product_data: {
+                  name: "Organization Funding",
+                },
+              },
+              quantity: 1,
+            },
+          ],
+          customer_email: email,
+          mode: "payment",
+          success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?amount=${amount}&name=${name}&email=${email}&session_id={CHECKOUT_SESSION_ID}`,
+
+          cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+        });
+
+        res.send({ url: session.url, sessionId: session.id });
+      } catch (err) {
+        console.error("Stripe Error:", err);
+        res.status(500).send({ message: "Stripe session failed" });
+      }
+    });
+
+    // Save Funding Record When Payment Success Page Calls API
+    app.post("/fundings", async (req, res) => {
+      try {
+        const { amount, name, email, sessionId } = req.body;
+
+        if (!amount || !name || !email || !sessionId) {
+          return res.status(400).send({ message: "Missing required fields" });
+        }
+
+        const existing = await fundsCollection.findOne({ sessionId });
+        if (existing) {
+          return res.send({ success: true, message: "Already saved" });
+        }
+
+        const result = await fundsCollection.insertOne({
+          amount: parseInt(amount),
+          name,
+          email,
+          sessionId,
+          date: new Date(),
+        });
+
+        res.send({ success: true, fundingId: result.insertedId });
+      } catch (err) {
+        console.error("Save Funding Error:", err);
+        res.status(500).send({ message: "Failed to save funding" });
+      }
+    });
+
+    //  Get All Funding Records
+    app.get("/fundings", async (req, res) => {
+      try {
+        const fundings = await fundsCollection.find().toArray();
+        res.send(fundings);
+      } catch (err) {
+        console.error("Fetch Fundings Error:", err);
+        res.status(500).send({ message: "Failed to fetch fundings" });
+      }
+    });
+
+    // 4Get Total Funding
+    app.get("/fundings/total", async (req, res) => {
+      try {
+        const funds = await fundsCollection.find().toArray();
+        const total = funds.reduce((sum, f) => sum + f.amount, 0);
+        res.send({ total });
+      } catch (err) {
+        console.error("Total Funding Error:", err);
+        res.status(500).send({ message: "Failed to calculate total" });
+      }
     });
 
     await client.db("admin").command({ ping: 1 });
