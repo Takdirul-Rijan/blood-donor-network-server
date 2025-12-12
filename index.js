@@ -29,9 +29,10 @@ async function run() {
     const requestsCollection = db.collection("requests");
     const fundsCollection = db.collection("fundings");
 
-    app.post("/users/register", async (req, res) => {
-      console.log("Register request body:", req.body);
+    // common routes - All role
 
+    // User registration -all role
+    app.post("/users/register", async (req, res) => {
       const { name, email, avatar, bloodGroup, district, upazila, password } =
         req.body;
 
@@ -66,6 +67,7 @@ async function run() {
       }
     });
 
+    // get User by email for all roles
     app.get("/users/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
@@ -82,6 +84,7 @@ async function run() {
       }
     });
 
+    // get user role by email
     app.get("/users/role/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
@@ -98,6 +101,7 @@ async function run() {
       }
     });
 
+    // update User Profile
     app.patch("/users/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email.toLowerCase());
@@ -119,25 +123,9 @@ async function run() {
       }
     });
 
-    app.get("/admin/dashboard-stats", async (req, res) => {
-      try {
-        const totalUsers = await usersCollection.countDocuments({});
-        const totalRequests = await requestsCollection.countDocuments({});
-        const totalFundsAgg = await fundsCollection
-          .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
-          .toArray();
+    // donor - route
 
-        res.json({
-          totalUsers,
-          totalRequests,
-          totalFunding: totalFundsAgg[0]?.total || 0,
-        });
-      } catch (error) {
-        console.error("Error fetching admin stats:", error);
-        res.status(500).json({ message: "Error fetching admin statistics" });
-      }
-    });
-
+    // create Blood Donation Request
     app.post("/requests", async (req, res) => {
       const requestData = req.body;
 
@@ -192,6 +180,7 @@ async function run() {
       }
     });
 
+    // recent requests for donor
     app.get("/requests/recent", async (req, res) => {
       try {
         const email = req.query.email;
@@ -246,6 +235,7 @@ async function run() {
       }
     });
 
+    // All requests for donor with pagination
     app.get("/requests/all", async (req, res) => {
       try {
         const email = req.query.email;
@@ -314,6 +304,133 @@ async function run() {
       }
     });
 
+    // Single Request by ID
+    app.get("/requests/:id", async (req, res) => {
+      const id = req.params.id;
+      const request = await requestsCollection.findOne({
+        _id: new ObjectId(id),
+      });
+
+      res.json(request);
+    });
+
+    // update request- donor
+    app.put("/requests/:id", async (req, res) => {
+      const id = req.params.id;
+      const body = req.body;
+
+      const updated = await requestsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: body }
+      );
+
+      res.json(updated);
+    });
+
+    // update request status - donor
+    app.patch("/requests/status/:id", async (req, res) => {
+      const id = req.params.id;
+      const { status, donorEmail } = req.body;
+
+      const updateData = { status };
+
+      if (status === "inprogress" && donorEmail) {
+        updateData.donorEmail = donorEmail;
+      }
+
+      await requestsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updateData }
+      );
+
+      res.json({ message: "Status updated" });
+    });
+
+    // delete request of donor
+    app.delete("/requests/:id", async (req, res) => {
+      const id = req.params.id;
+
+      const result = await requestsCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+
+      res.json(result);
+    });
+
+    // search donors
+    app.get("/donors/search", async (req, res) => {
+      const { bloodGroup, district, upazila } = req.query;
+
+      const filter = {
+        role: "donor",
+        status: "active",
+      };
+
+      if (bloodGroup) filter.bloodGroup = bloodGroup;
+      if (district) filter.district = district;
+      if (upazila) filter.upazila = upazila;
+
+      try {
+        const donors = await usersCollection
+          .find(filter)
+          .project({ password: 0 })
+          .toArray();
+
+        res.send(donors);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Search failed" });
+      }
+    });
+
+    // Volunteer route
+
+    // Volunteer dashboard statistics
+    app.get("/volunteer/dashboard-stats", async (req, res) => {
+      try {
+        const totalUsers = await usersCollection.countDocuments({});
+        const totalRequests = await requestsCollection.countDocuments({});
+        const totalFundingAgg = await fundsCollection
+          .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
+          .toArray();
+        const totalFunding = totalFundingAgg[0]?.total || 0;
+
+        res.json({
+          totalUsers,
+          totalRequests,
+          totalFunding,
+        });
+      } catch (error) {
+        console.error("Error fetching volunteer stats:", error);
+        res
+          .status(500)
+          .json({ message: "Error fetching volunteer statistics" });
+      }
+    });
+
+    // Admin route
+
+    // admin dashboard statistics
+    app.get("/admin/dashboard-stats", async (req, res) => {
+      try {
+        const totalUsers = await usersCollection.countDocuments({});
+        const totalRequests = await requestsCollection.countDocuments({});
+        const totalFundsAgg = await fundsCollection
+          .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
+          .toArray();
+
+        res.json({
+          totalUsers,
+          totalRequests,
+          totalFunding: totalFundsAgg[0]?.total || 0,
+        });
+      } catch (error) {
+        console.error("Error fetching admin stats:", error);
+        res.status(500).json({ message: "Error fetching admin statistics" });
+      }
+    });
+
+    // all requests for admin with pagination
     app.get("/admin/requests/all", async (req, res) => {
       try {
         const page = parseInt(req.query.page, 10) || 1;
@@ -355,55 +472,7 @@ async function run() {
       }
     });
 
-    app.get("/requests/:id", async (req, res) => {
-      const id = req.params.id;
-      const request = await requestsCollection.findOne({
-        _id: new ObjectId(id),
-      });
-
-      res.json(request);
-    });
-
-    app.put("/requests/:id", async (req, res) => {
-      const id = req.params.id;
-      const body = req.body;
-
-      const updated = await requestsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: body }
-      );
-
-      res.json(updated);
-    });
-
-    app.patch("/requests/status/:id", async (req, res) => {
-      const id = req.params.id;
-      const { status, donorEmail } = req.body;
-
-      const updateData = { status };
-
-      if (status === "inprogress" && donorEmail) {
-        updateData.donorEmail = donorEmail;
-      }
-
-      await requestsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: updateData }
-      );
-
-      res.json({ message: "Status updated" });
-    });
-
-    app.delete("/requests/:id", async (req, res) => {
-      const id = req.params.id;
-
-      const result = await requestsCollection.deleteOne({
-        _id: new ObjectId(id),
-      });
-
-      res.json(result);
-    });
-
+    // admin users list with pagination
     app.get("/admin/users", async (req, res) => {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 5;
@@ -423,6 +492,7 @@ async function run() {
       res.json({ users, total });
     });
 
+    // Update User Status
     app.patch("/admin/users/status/:email", async (req, res) => {
       const email = req.params.email;
       const { status } = req.body;
@@ -432,6 +502,7 @@ async function run() {
       res.json({ success: true });
     });
 
+    // update user role
     app.patch("/admin/users/role/:email", async (req, res) => {
       const email = req.params.email;
       const { role } = req.body;
@@ -441,50 +512,44 @@ async function run() {
       res.json({ success: true });
     });
 
-    // Volunteer dashboard stats
-    app.get("/volunteer/dashboard-stats", async (req, res) => {
+    // admin donation statistics chart
+    app.get("/admin/donation-stats", async (req, res) => {
       try {
-        const totalUsers = await usersCollection.countDocuments({});
-        const totalRequests = await requestsCollection.countDocuments({});
-        const totalFundingAgg = await fundsCollection
-          .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
-          .toArray();
-        const totalFunding = totalFundingAgg[0]?.total || 0;
+        const now = new Date();
 
-        res.json({
-          totalUsers,
-          totalRequests,
-          totalFunding,
+        const startOfToday = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate()
+        );
+
+        const startOfWeek = new Date(startOfToday);
+        startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay());
+
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const daily = await requestsCollection.countDocuments({
+          createdAt: { $gte: startOfToday },
         });
+
+        const weekly = await requestsCollection.countDocuments({
+          createdAt: { $gte: startOfWeek },
+        });
+
+        const monthly = await requestsCollection.countDocuments({
+          createdAt: { $gte: startOfMonth },
+        });
+
+        res.json({ daily, weekly, monthly });
       } catch (error) {
-        console.error("Error fetching volunteer stats:", error);
-        res
-          .status(500)
-          .json({ message: "Error fetching volunteer statistics" });
+        console.error("Error fetching donation stats:", error);
+        res.status(500).json({ message: "Error fetching stats" });
       }
     });
 
-    // search donors
-    app.get("/donors/search", async (req, res) => {
-      const { bloodGroup, district, upazila } = req.query;
+    // Stripe payment route
 
-      const donors = await usersCollection
-        .find({
-          role: "donor",
-          status: "active",
-          bloodGroup,
-          district,
-          upazila,
-        })
-        .project({ password: 0 })
-        .toArray();
-
-      res.send(donors);
-    });
-
-    // stripe integration
-
-    // Create Checkout Session (User clicks Give Fund)
+    // create stripe checkout session
     app.post("/create-checkout-session", async (req, res) => {
       try {
         const { amount, email, name } = req.body;
@@ -521,7 +586,7 @@ async function run() {
       }
     });
 
-    // Save Funding Record When Payment Success Page Calls API
+    // save funding record
     app.post("/fundings", async (req, res) => {
       try {
         const { amount, name, email, sessionId } = req.body;
@@ -550,7 +615,7 @@ async function run() {
       }
     });
 
-    //  Get All Funding Records
+    // get all funding records
     app.get("/fundings", async (req, res) => {
       try {
         const fundings = await fundsCollection.find().toArray();
@@ -561,7 +626,7 @@ async function run() {
       }
     });
 
-    // 4Get Total Funding
+    // get total funding amount
     app.get("/fundings/total", async (req, res) => {
       try {
         const funds = await fundsCollection.find().toArray();
